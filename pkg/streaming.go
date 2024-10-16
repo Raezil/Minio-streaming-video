@@ -47,6 +47,15 @@ func (streaming *Streaming) GetObjectInfo(w http.ResponseWriter, objectName stri
 	return &objectInfo, nil
 }
 
+func (streaming *Streaming) Get(w http.ResponseWriter, objectName string) *minio.Object {
+	object, err := streaming.GetObject(context.Background(), bucketName, objectName, minio.GetObjectOptions{})
+	if err != nil {
+		http.Error(w, "Failed to get object", http.StatusInternalServerError)
+		log.Printf("Error getting object '%s': %v\n", objectName, err)
+		return nil
+	}
+	return object
+}
 func (streaming *Streaming) Stream(w http.ResponseWriter, r *http.Request) {
 	objectName := r.FormValue("objectName")
 	if objectName == "" {
@@ -70,12 +79,7 @@ func (streaming *Streaming) Stream(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Length", strconv.FormatInt(fileSize, 10))
 		w.WriteHeader(http.StatusOK)
 
-		object, err := streaming.GetObject(context.Background(), bucketName, objectName, minio.GetObjectOptions{})
-		if err != nil {
-			http.Error(w, "Failed to get object", http.StatusInternalServerError)
-			log.Printf("Error getting object '%s': %v\n", objectName, err)
-			return
-		}
+		object := streaming.Get(w, objectName)
 		defer object.Close()
 
 		if _, err := io.Copy(w, object); err != nil {
@@ -103,12 +107,7 @@ func (streaming *Streaming) Stream(w http.ResponseWriter, r *http.Request) {
 func (streaming *Streaming) ReadBuffer(objectName string, w http.ResponseWriter, start int64, end int64) {
 	getOpts := minio.GetObjectOptions{}
 	getOpts.SetRange(start, end)
-	object, err := streaming.GetObject(context.Background(), bucketName, objectName, getOpts)
-	if err != nil {
-		http.Error(w, "Failed to get object", http.StatusInternalServerError)
-		log.Printf("Error getting object '%s': %v\n", objectName, err)
-		return
-	}
+	object := streaming.Get(w, objectName)
 	defer object.Close()
 	buffer := make([]byte, defaultBufferSize)
 	for {
